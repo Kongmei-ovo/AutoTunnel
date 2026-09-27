@@ -1,7 +1,7 @@
 FROM node:22-alpine AS frontend
 WORKDIR /build/frontend
 COPY frontend/package*.json ./
-RUN npm ci
+RUN npm ci --ignore-scripts
 COPY frontend/ ./
 RUN npm run build
 
@@ -16,8 +16,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends iproute2 ca-cer
     && useradd --uid 10001 --create-home autotunnel \
     && mkdir /data && chown autotunnel:autotunnel /data
 WORKDIR /app
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.lock ./
+RUN pip install --no-cache-dir --require-hashes --only-binary :all: -r requirements.lock
 COPY backend/ ./backend/
 COPY --from=frontend /build/frontend/dist/ ./frontend/dist/
 USER autotunnel
