@@ -1,0 +1,7 @@
+# Optional: only use on a trusted NAS. Docker socket access grants control over the daemon.
+services:
+  autotunnel:
+    group_add:
+      - "${DOCKER_GID}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
