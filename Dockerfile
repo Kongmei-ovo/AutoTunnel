@@ -22,4 +22,4 @@ COPY backend/ ./backend/
 COPY --from=frontend /build/frontend/dist/ ./frontend/dist/
 USER autotunnel
 EXPOSE 18770
-CMD ["uvicorn", "backend.app:app", "--host", "127.0.0.1", "--port", "18770"]
+CMD ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "18770"]

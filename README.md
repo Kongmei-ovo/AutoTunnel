@@ -17,7 +17,7 @@ services:
     network_mode: host
     environment:
       AUTOTUNNEL_DATA_DIR: /data
-    command: ["uvicorn", "backend.app:app", "--host", "127.0.0.1", "--port", "18770"]
+    command: ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "18770"]
     volumes:
       - autotunnel-data:/data
 
@@ -25,7 +25,7 @@ volumes:
   autotunnel-data:
 ```
 
-默认管理页面只在 NAS 本机的 `127.0.0.1:18770` 开放。在电脑上运行 `ssh -L 18770:127.0.0.1:18770 用户名@NAS地址`，然后打开 **http://127.0.0.1:18770**。域名需要已接入 Cloudflare；首次登录时会自动准备 `cloudflared`。
+默认管理页面监听 NAS 的 `0.0.0.0:18770`，在局域网电脑上打开 **http://NAS地址:18770**。请勿将管理端口直接暴露到公网。域名需要已接入 Cloudflare；首次登录时会自动准备 `cloudflared`。
 
 每次向 `main` 提交代码，GitHub Actions 都会测试并发布 `linux/amd64`、`linux/arm64` 镜像到 GHCR。更新时执行 `docker compose pull && docker compose up -d`。
 
@@ -52,7 +52,7 @@ volumes:
 <details>
 <summary>更多部署与数据说明</summary>
 
-- Compose 使用 Linux host 网络，因此可连接 NAS 本机的 `127.0.0.1:<端口>`。Docker 应用需将 TCP 端口映射到 NAS 宿主机。管理端口不要直接暴露到公网；若经 NAS 反向代理访问，请给代理设置身份验证，并将 Compose 命令中的监听地址改为 `0.0.0.0`。
+- Compose 使用 Linux host 网络，因此可连接 NAS 本机的 `127.0.0.1:<端口>`。Docker 应用需将 TCP 端口映射到 NAS 宿主机。管理端口默认可从局域网访问；若经 NAS 反向代理访问，请给代理设置身份验证。
 - 登录和 Tunnel 凭据保存在 `autotunnel-data` 卷内的 SQLite 数据库。重建容器不会清除它；请保护卷及其备份。已启用的穿透会在重启后恢复。
 - 若需要显示 Docker 容器名称，可使用仓库里的 [可选 Compose 配置](compose.docker-discovery.yaml)。挂载 Docker socket 即使是只读卷也具有控制 Docker 的能力，仅在可信环境启用。
 - 从 Mac 迁移时，先停止 Mac 端，再将 `~/.autotunnel/autotunnel.sqlite3` 复制到 NAS 的数据卷。不要让同一个 Tunnel 的两个实例长期同时运行。
