@@ -1,7 +1,6 @@
 services:
   autotunnel:
-    build: .
-    image: autotunnel:local
+    image: ghcr.io/kongmei-ovo/autotunnel:latest
     container_name: autotunnel
     restart: unless-stopped
     network_mode: host

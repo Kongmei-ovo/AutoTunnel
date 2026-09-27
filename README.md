@@ -1,52 +1,62 @@
 # AutoTunnel
 
-把本机应用发布到自己的 Cloudflare 域名。首次登录后，选择本地端口与地址前缀即可创建 Tunnel 和 DNS。后续打开默认进入服务管理，可以添加更多服务、修改名称与地址前缀、切换本地端口、暂停或恢复连接，以及删除 Tunnel 和对应 DNS 记录。
+**登录 Cloudflare，选一个本地服务，再填域名前缀。几步就能得到自己的 HTTPS 地址。**
 
-## 启动
+适合把 NAS 上的相册、媒体中心、笔记等服务分享给自己或朋友。AutoTunnel 会创建 Cloudflare Tunnel 和 DNS 记录；以后还能在服务管理里改地址、换端口、暂停或继续连接。
 
-需要 Python 3.10+ 和 Node.js 20+。首次登录时会自动下载并校验 `cloudflared`（支持 macOS/Linux 的 x86_64 和 ARM64）；也可自行安装并放入 PATH。域名需已接入 Cloudflare。
+## 复制这段 Compose，直接部署
 
-```bash
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-cd frontend && npm install && npm run build && cd ..
-.venv/bin/uvicorn backend.app:app --host 127.0.0.1 --port 18770
+无需下载本项目代码。把下面内容保存为 `compose.yaml`，在 Linux NAS 上的同一目录执行 `docker compose up -d`：
+
+```yaml
+services:
+  autotunnel:
+    image: ghcr.io/kongmei-ovo/autotunnel:latest
+    container_name: autotunnel
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      AUTOTUNNEL_DATA_DIR: /data
+    command: ["uvicorn", "backend.app:app", "--host", "127.0.0.1", "--port", "18770"]
+    volumes:
+      - autotunnel-data:/data
+
+volumes:
+  autotunnel-data:
 ```
 
-打开 http://127.0.0.1:18770。开发前端可在 `frontend` 目录执行 `npm run dev`，访问 http://127.0.0.1:5175。
+默认管理页面只在 NAS 本机的 `127.0.0.1:18770` 开放。在电脑上运行 `ssh -L 18770:127.0.0.1:18770 用户名@NAS地址`，然后打开 **http://127.0.0.1:18770**。域名需要已接入 Cloudflare；首次登录时会自动准备 `cloudflared`。
 
-## 数据与运行方式
+每次向 `main` 提交代码，GitHub Actions 都会测试并发布 `linux/amd64`、`linux/arm64` 镜像到 GHCR。更新时执行 `docker compose pull && docker compose up -d`。
 
-Cloudflare 授权和 Tunnel 运行凭据保存在 `~/.autotunnel/autotunnel.sqlite3`。目录权限为 `0700`，数据库权限为 `0600`；凭据在本机以明文形式保存，请保护系统账户与备份。可用 `AUTOTUNNEL_DATA_DIR` 更改位置。已有的旧版单 Tunnel 配置会在启动时迁入数据库。
+## 看看用起来是什么样
 
-每个服务拥有独立的 Tunnel 和连接进程。开启状态会持久化：AutoTunnel 重启后会尝试恢复已开启的连接；手动暂停的服务保持暂停。删除服务会同步删除 AutoTunnel 管理的 DNS 记录和 Cloudflare Tunnel。Docker 服务需先将 TCP 端口映射到宿主机，才能被连接。
+下图均使用 `example.com` 演示数据，没有展示真实账号或域名。
 
-## Linux NAS / Docker 部署
+**第一次打开：登录 Cloudflare，按引导操作。**
 
-在 NAS 上将本项目放到一个目录，运行：
+![首次使用的连接引导](docs/images/01-welcome.png)
 
-```bash
-docker compose up -d --build
-```
+**发现本地服务：选 Docker 映射端口或手动输入。**
 
-如果系统使用独立的 `docker-compose` 命令，改为 `docker-compose up -d --build`。Compose 使用 Linux host 网络，让 AutoTunnel 能连接 NAS 本机的 `127.0.0.1:<端口>`；无需为 AutoTunnel 配置端口映射。数据保存在 `autotunnel-data` 命名卷，容器重建或升级不会清除登录和穿透配置。首次登录时容器会下载并校验 `cloudflared`。从 Mac 迁移时，请先停止 Mac 上的 AutoTunnel，再将 `~/.autotunnel/autotunnel.sqlite3` 复制到 NAS 的数据卷；重新启动后会恢复已启用的穿透。不要让同一个 Tunnel 的两个实例长期同时运行。
+![本地服务发现](docs/images/03-discovery.png)
 
-默认管理页面仅监听 NAS 的 `127.0.0.1:18770`，可在 NAS 本机打开，或用 SSH 转发访问：
+**设置地址：选域名、填前缀，马上看到预览。**
 
-```bash
-ssh -L 18770:127.0.0.1:18770 user@nas-address
-```
+![设置公开地址](docs/images/04-address.png)
 
-然后在电脑上打开 `http://127.0.0.1:18770`。如果已经有带身份验证的 NAS 反向代理，可设置 `AUTOTUNNEL_BIND_HOST=0.0.0.0` 再运行 Compose，通过反向代理访问管理页面；不要把没有保护的管理 API 直接公开。公开应用自身也应设置登录或访问保护。
+**服务管理：之后再来，直接管理已有连接。**
 
-Linux host 网络会列出 NAS 本机监听端口，包括已映射到宿主机的容器端口。若还想显示 Docker 容器名称，可选择挂载 Docker socket：
+![多个穿透的服务管理页面](docs/images/02-management.png)
 
-```bash
-DOCKER_GID=$(stat -c '%g' /var/run/docker.sock) docker compose -f compose.yaml -f compose.docker-discovery.yaml up -d --build
-```
+<details>
+<summary>更多部署与数据说明</summary>
 
-Docker socket 即使以只读卷挂载，也能通过 API 控制 Docker 守护进程；只有信任 AutoTunnel 容器时才启用这一可选功能。容器默认以非 root 用户运行。
+- Compose 使用 Linux host 网络，因此可连接 NAS 本机的 `127.0.0.1:<端口>`。Docker 应用需将 TCP 端口映射到 NAS 宿主机。管理端口不要直接暴露到公网；若经 NAS 反向代理访问，请给代理设置身份验证，并将 Compose 命令中的监听地址改为 `0.0.0.0`。
+- 登录和 Tunnel 凭据保存在 `autotunnel-data` 卷内的 SQLite 数据库。重建容器不会清除它；请保护卷及其备份。已启用的穿透会在重启后恢复。
+- 若需要显示 Docker 容器名称，可使用仓库里的 [可选 Compose 配置](compose.docker-discovery.yaml)。挂载 Docker socket 即使是只读卷也具有控制 Docker 的能力，仅在可信环境启用。
+- 从 Mac 迁移时，先停止 Mac 端，再将 `~/.autotunnel/autotunnel.sqlite3` 复制到 NAS 的数据卷。不要让同一个 Tunnel 的两个实例长期同时运行。
+- Vite 等应用可能拒绝公开域名的 Host。AutoTunnel 会自动检测并调整；也可以在新建或编辑服务时手动选择 Host 处理方式。
+- 要在 Mac 上从源码运行：安装 Python 3.10+ 和 Node.js 20+，执行 `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`，再在 `frontend` 目录执行 `npm ci && npm run build`，最后从项目根目录运行 `.venv/bin/uvicorn backend.app:app --host 127.0.0.1 --port 18770`。
 
-对于 Vite 等限制请求主机名的应用，AutoTunnel 会在创建或重启连接时自动检测拦截响应，并为该穿透设置本地 Host。若其他应用需要指定行为，可在新建或编辑服务时选「保留公开域名」或「使用 localhost」。这不是 Mac 特有的问题。
-
-管理 API 仅应监听本机回环地址，或放在带身份验证的反向代理后面。
+</details>
