@@ -105,10 +105,19 @@ class Store:
         allowed = {"name", "hostname", "port", "enabled", "zone_id", "zone_name", "host_mode", "origin_host"}
         if not fields or set(fields) - allowed:
             raise ValueError("unsupported tunnel fields")
-        fields["updated_at"] = int(time.time())
-        clause = ", ".join(f"{key}=?" for key in fields)
+        columns = ("name", "hostname", "port", "enabled", "zone_id", "zone_name", "host_mode", "origin_host")
+        values = tuple(value for column in columns for value in (column in fields, fields.get(column)))
         with self._connect() as db:
-            db.execute(f"UPDATE tunnels SET {clause} WHERE id=?", (*fields.values(), id))
+            db.execute("""UPDATE tunnels SET
+                name=CASE WHEN ? THEN ? ELSE name END,
+                hostname=CASE WHEN ? THEN ? ELSE hostname END,
+                port=CASE WHEN ? THEN ? ELSE port END,
+                enabled=CASE WHEN ? THEN ? ELSE enabled END,
+                zone_id=CASE WHEN ? THEN ? ELSE zone_id END,
+                zone_name=CASE WHEN ? THEN ? ELSE zone_name END,
+                host_mode=CASE WHEN ? THEN ? ELSE host_mode END,
+                origin_host=CASE WHEN ? THEN ? ELSE origin_host END,
+                updated_at=? WHERE id=?""", (*values, int(time.time()), id))
 
     def delete_tunnel(self, id: str) -> None:
         with self._connect() as db:
