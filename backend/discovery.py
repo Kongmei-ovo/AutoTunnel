@@ -25,15 +25,18 @@ PORT_HINTS = {
 HOST_PROCESSES_FILE = Path(os.getenv("AUTOTUNNEL_HOST_PROCESSES_FILE", "/run/autotunnel-host-processes/listeners.json"))
 
 
-def _host_process_names() -> dict[int, str]:
+def _host_snapshot() -> tuple[dict[int, str], list[dict[str, Any]]]:
     try:
         if time.time() - HOST_PROCESSES_FILE.stat().st_mtime > 30:
-            return {}
-        names = json.loads(HOST_PROCESSES_FILE.read_text())
-        return {int(port): name for port, name in names.items()
-                if str(port).isdigit() and 1 <= int(port) <= 65535 and isinstance(name, str) and name[:1]}
+            return {}, []
+        payload = json.loads(HOST_PROCESSES_FILE.read_text())
+        names = payload.get("processes", {}) if "processes" in payload else payload
+        containers = payload.get("containers", []) if "containers" in payload else []
+        process_names = {int(port): name for port, name in names.items()
+                         if str(port).isdigit() and 1 <= int(port) <= 65535 and isinstance(name, str) and name[:1]}
+        return process_names, containers if isinstance(containers, list) else []
     except (OSError, ValueError, TypeError, AttributeError):
-        return {}
+        return {}, []
 
 
 def _run(*args: str) -> str:
@@ -68,7 +71,8 @@ def _docker_socket_containers() -> list[dict[str, Any]]:
 
 def discover() -> list[dict[str, Any]]:
     found: dict[int, dict[str, Any]] = {}
-    for item in _docker_socket_containers():
+    host_process_names, snapshot_containers = _host_snapshot()
+    for item in snapshot_containers or _docker_socket_containers():
         for mapping in item.get("Ports", []):
             if mapping.get("Type") != "tcp" or not mapping.get("PublicPort"):
                 continue
@@ -109,7 +113,7 @@ def discover() -> list[dict[str, Any]]:
                 process = re.search(r'users:\(\("([^"]+)', line)
                 found.setdefault(port, {"name": process.group(1) if process else "Linux 服务", "port": port,
                                         "source": "本机进程", "detail": "正在监听"})
-    for port, name in _host_process_names().items():
+    for port, name in host_process_names.items():
         if port in found and found[port]["source"] != "Docker":
             found[port]["name"] = name
     for item in found.values():

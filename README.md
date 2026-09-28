@@ -15,11 +15,19 @@ services:
     container_name: autotunnel
     restart: unless-stopped
     network_mode: host
+    pid: host
+    user: "0"
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - apparmor:unconfined
     environment:
       AUTOTUNNEL_DATA_DIR: /data
+    entrypoint: ["python", "-m", "backend.entrypoint"]
     command: ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "18770"]
     volumes:
       - autotunnel-data:/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
 
 volumes:
   autotunnel-data:
@@ -27,23 +35,7 @@ volumes:
 
 默认管理页面监听 NAS 的 `0.0.0.0:18770`，在局域网电脑上打开 **http://NAS地址:18770**。请勿将管理端口直接暴露到公网。域名需要已接入 Cloudflare；首次登录时会自动准备 `cloudflared`。
 
-### 显示 Docker 容器名称
-
-基础部署只能发现监听端口，通常无法看到 NAS 上其他进程的名称。若要显示真实 Docker 容器名，在可信的 NAS 上先运行 `stat -c '%g' /var/run/docker.sock`，再给上面的 `autotunnel` 服务添加以下配置，把 `994` 换成输出的数字：
-
-```yaml
-    group_add:
-      - "994"
-    volumes:
-      - autotunnel-data:/data
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-```
-
-这里的 `volumes` 替换原有的 `volumes`，然后运行 `docker compose up -d`。也可以使用仓库里的 [可选 Compose 配置](compose.docker-discovery.yaml)。Docker socket 权限本身可控制 Docker，即使以只读方式挂载也一样；只在可信的 NAS 上启用。未启用时，少数常见端口会显示“常见用途”提示，它不是对当前应用的验证。
-
-### 显示 NAS 上的 Linux 进程名称
-
-容器即使使用 host 网络，也无法直接读取宿主机监听端口对应的进程。可信 Linux 主机可以使用 [可选进程发现配置](compose.host-processes.yaml)启动独立辅助容器；它读取宿主机进程信息，仅向 AutoTunnel 提供端口与进程名的快照。将该配置文件与 `compose.yaml` 放在一起，运行 `docker compose -f compose.yaml -f compose.host-processes.yaml up -d`。辅助容器需要宿主机 PID 可见性、`SYS_PTRACE` 和放宽的 AppArmor 限制；不要在不可信主机上启用。Docker 容器名仍优先于进程名。
+这份 Compose 会在同一个容器中显示 Docker 容器名和 NAS 上的 Linux 进程名。读取宿主机进程需要 root、共享 PID、`SYS_PTRACE` 和放宽 AppArmor 限制；Docker socket 即使只读挂载也具有控制 Docker 的能力，因此请仅在可信的 NAS 上运行。端口的“常见用途”只作提示，不代表已验证应用类型。
 
 每次向 `main` 提交代码，GitHub Actions 都会测试并发布 `linux/amd64`、`linux/arm64` 镜像到 GHCR。更新时执行 `docker compose pull && docker compose up -d`。
 

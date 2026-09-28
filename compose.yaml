@@ -4,13 +4,21 @@ services:
     container_name: autotunnel
     restart: unless-stopped
     network_mode: host
+    pid: host
+    user: "0"
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - apparmor:unconfined
     environment:
       AUTOTUNNEL_DATA_DIR: /data
       AUTOTUNNEL_ORIGIN_HOST: 127.0.0.1
       AUTOTUNNEL_PORT: 18770
+    entrypoint: ["python", "-m", "backend.entrypoint"]
     command: ["uvicorn", "backend.app:app", "--host", "${AUTOTUNNEL_BIND_HOST:-0.0.0.0}", "--port", "18770"]
     volumes:
       - autotunnel-data:/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
 
 volumes:
   autotunnel-data:

@@ -9,6 +9,7 @@ import pytest
 from backend.core import TunnelError, TunnelManager
 from backend import discovery
 from backend.host_snapshot import snapshot
+from backend import entrypoint
 
 
 def test_login_zone_and_creation_does_not_overwrite_dns(tmp_path, monkeypatch):
@@ -64,14 +65,23 @@ def test_host_snapshot_names_local_listener_without_overwriting_docker(tmp_path,
     output = ('LISTEN 0 128 0.0.0.0:22 0.0.0.0:* users:(("sshd",pid=1,fd=3))\n'
               'LISTEN 0 128 0.0.0.0:3000 0.0.0.0:* users:(("python",pid=2,fd=4))')
     file = tmp_path / "listeners.json"
-    file.write_text(json.dumps(snapshot(output)))
+    file.write_text(json.dumps({"processes": snapshot(output), "containers": [{
+        "Names": ["/my-app"], "Ports": [{"Type": "tcp", "PublicPort": 3000, "PrivatePort": 3000}]}]}))
     monkeypatch.setattr(discovery, "HOST_PROCESSES_FILE", file)
-    monkeypatch.setattr(discovery, "_docker_socket_containers", lambda: [{
-        "Names": ["/my-app"], "Ports": [{"Type": "tcp", "PublicPort": 3000, "PrivatePort": 3000}]}])
+    monkeypatch.setattr(discovery, "_docker_socket_containers", lambda: [])
     monkeypatch.setattr(discovery.shutil, "which", lambda name: name if name == "ss" else None)
     monkeypatch.setattr(discovery, "_run", lambda *args: output)
     found = discovery.discover()
     assert [(item["port"], item["name"]) for item in found] == [(3000, "my-app"), (22, "sshd")]
+
+
+def test_entrypoint_starts_discovery_and_web_server(monkeypatch):
+    calls = []
+    monkeypatch.setattr(entrypoint.sys, "argv", ["entrypoint", "uvicorn", "backend.app:app"])
+    monkeypatch.setattr(entrypoint.subprocess, "Popen", lambda args: calls.append(("helper", args)))
+    monkeypatch.setattr(entrypoint.os, "execvp", lambda program, args: calls.append(("web", args)))
+    entrypoint.main()
+    assert [call[0] for call in calls] == ["helper", "web"]
 
 
 def test_create_writes_loopback_ingress_and_removes_account_cert(tmp_path, monkeypatch):

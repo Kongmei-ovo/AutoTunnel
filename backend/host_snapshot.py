@@ -8,6 +8,8 @@ import subprocess
 import time
 from pathlib import Path
 
+from .discovery import _docker_socket_containers
+
 OUTPUT = Path(os.getenv("AUTOTUNNEL_HOST_PROCESSES_FILE", "/run/autotunnel-host-processes/listeners.json"))
 
 
@@ -30,7 +32,8 @@ def main() -> None:
         result = subprocess.run(["ss", "-ltnpH"], capture_output=True, text=True, timeout=10, check=False)
         if result.returncode == 0:
             temporary = OUTPUT.with_suffix(".tmp")
-            temporary.write_text(json.dumps(snapshot(result.stdout), ensure_ascii=False))
+            temporary.write_text(json.dumps({"processes": snapshot(result.stdout),
+                                             "containers": _docker_socket_containers()}, ensure_ascii=False))
             temporary.chmod(0o644)
             temporary.replace(OUTPUT)
         time.sleep(5)
