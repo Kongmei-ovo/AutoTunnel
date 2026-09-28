@@ -7,6 +7,8 @@ import os
 import re
 import shutil
 import subprocess
+import time
+from pathlib import Path
 from typing import Any
 
 
@@ -19,6 +21,19 @@ PORT_HINTS = {
     1883: "MQTT", 3306: "MySQL", 5432: "PostgreSQL", 5672: "AMQP",
     6379: "Redis", 8080: "HTTP", 8443: "HTTPS",
 }
+
+HOST_PROCESSES_FILE = Path(os.getenv("AUTOTUNNEL_HOST_PROCESSES_FILE", "/run/autotunnel-host-processes/listeners.json"))
+
+
+def _host_process_names() -> dict[int, str]:
+    try:
+        if time.time() - HOST_PROCESSES_FILE.stat().st_mtime > 30:
+            return {}
+        names = json.loads(HOST_PROCESSES_FILE.read_text())
+        return {int(port): name for port, name in names.items()
+                if str(port).isdigit() and 1 <= int(port) <= 65535 and isinstance(name, str) and name[:1]}
+    except (OSError, ValueError, TypeError, AttributeError):
+        return {}
 
 
 def _run(*args: str) -> str:
@@ -94,6 +109,9 @@ def discover() -> list[dict[str, Any]]:
                 process = re.search(r'users:\(\("([^"]+)', line)
                 found.setdefault(port, {"name": process.group(1) if process else "Linux 服务", "port": port,
                                         "source": "本机进程", "detail": "正在监听"})
+    for port, name in _host_process_names().items():
+        if port in found and found[port]["source"] != "Docker":
+            found[port]["name"] = name
     for item in found.values():
         if item["source"] != "Docker" and item["port"] in PORT_HINTS:
             item["port_hint"] = PORT_HINTS[item["port"]]

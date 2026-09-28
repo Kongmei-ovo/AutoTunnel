@@ -8,6 +8,7 @@ import pytest
 
 from backend.core import TunnelError, TunnelManager
 from backend import discovery
+from backend.host_snapshot import snapshot
 
 
 def test_login_zone_and_creation_does_not_overwrite_dns(tmp_path, monkeypatch):
@@ -57,6 +58,20 @@ def test_discovers_docker_and_local_ports(monkeypatch):
     assert [(item["port"], item["name"]) for item in found] == [(3000, "my-app"), (8080, "python")]
     assert found[0].get("port_hint") is None
     assert found[1]["port_hint"] == "HTTP"
+
+
+def test_host_snapshot_names_local_listener_without_overwriting_docker(tmp_path, monkeypatch):
+    output = ('LISTEN 0 128 0.0.0.0:22 0.0.0.0:* users:(("sshd",pid=1,fd=3))\n'
+              'LISTEN 0 128 0.0.0.0:3000 0.0.0.0:* users:(("python",pid=2,fd=4))')
+    file = tmp_path / "listeners.json"
+    file.write_text(json.dumps(snapshot(output)))
+    monkeypatch.setattr(discovery, "HOST_PROCESSES_FILE", file)
+    monkeypatch.setattr(discovery, "_docker_socket_containers", lambda: [{
+        "Names": ["/my-app"], "Ports": [{"Type": "tcp", "PublicPort": 3000, "PrivatePort": 3000}]}])
+    monkeypatch.setattr(discovery.shutil, "which", lambda name: name if name == "ss" else None)
+    monkeypatch.setattr(discovery, "_run", lambda *args: output)
+    found = discovery.discover()
+    assert [(item["port"], item["name"]) for item in found] == [(3000, "my-app"), (22, "sshd")]
 
 
 def test_create_writes_loopback_ingress_and_removes_account_cert(tmp_path, monkeypatch):

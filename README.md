@@ -41,6 +41,10 @@ volumes:
 
 这里的 `volumes` 替换原有的 `volumes`，然后运行 `docker compose up -d`。也可以使用仓库里的 [可选 Compose 配置](compose.docker-discovery.yaml)。Docker socket 权限本身可控制 Docker，即使以只读方式挂载也一样；只在可信的 NAS 上启用。未启用时，少数常见端口会显示“常见用途”提示，它不是对当前应用的验证。
 
+### 显示 NAS 上的 Linux 进程名称
+
+容器即使使用 host 网络，也无法直接读取宿主机监听端口对应的进程。可信 Linux 主机可以使用 [可选进程发现配置](compose.host-processes.yaml)启动独立辅助容器；它读取宿主机进程信息，仅向 AutoTunnel 提供端口与进程名的快照。将该配置文件与 `compose.yaml` 放在一起，运行 `docker compose -f compose.yaml -f compose.host-processes.yaml up -d`。辅助容器需要宿主机 PID 可见性、`SYS_PTRACE` 和放宽的 AppArmor 限制；不要在不可信主机上启用。Docker 容器名仍优先于进程名。
+
 每次向 `main` 提交代码，GitHub Actions 都会测试并发布 `linux/amd64`、`linux/arm64` 镜像到 GHCR。更新时执行 `docker compose pull && docker compose up -d`。
 
 ## 看看用起来是什么样
