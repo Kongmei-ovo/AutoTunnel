@@ -55,6 +55,8 @@ def test_discovers_docker_and_local_ports(monkeypatch):
     monkeypatch.setattr(discovery, "_run", run)
     found = discovery.discover()
     assert [(item["port"], item["name"]) for item in found] == [(3000, "my-app"), (8080, "python")]
+    assert found[0].get("port_hint") is None
+    assert found[1]["port_hint"] == "HTTP"
 
 
 def test_create_writes_loopback_ingress_and_removes_account_cert(tmp_path, monkeypatch):

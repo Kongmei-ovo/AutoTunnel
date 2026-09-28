@@ -10,6 +10,17 @@ import subprocess
 from typing import Any
 
 
+# These describe conventional TCP port usage, not the application currently
+# listening on the port. Keep them separate from discovered process names.
+PORT_HINTS = {
+    21: "FTP", 22: "SSH", 25: "SMTP", 53: "DNS", 80: "HTTP",
+    110: "POP3", 139: "SMB", 143: "IMAP", 443: "HTTPS", 445: "SMB",
+    631: "IPP 打印", 993: "IMAPS", 995: "POP3S",
+    1883: "MQTT", 3306: "MySQL", 5432: "PostgreSQL", 5672: "AMQP",
+    6379: "Redis", 8080: "HTTP", 8443: "HTTPS",
+}
+
+
 def _run(*args: str) -> str:
     try:
         return subprocess.run(args, capture_output=True, text=True, timeout=5, check=False).stdout
@@ -83,4 +94,7 @@ def discover() -> list[dict[str, Any]]:
                 process = re.search(r'users:\(\("([^"]+)', line)
                 found.setdefault(port, {"name": process.group(1) if process else "Linux 服务", "port": port,
                                         "source": "本机进程", "detail": "正在监听"})
+    for item in found.values():
+        if item["source"] != "Docker" and item["port"] in PORT_HINTS:
+            item["port_hint"] = PORT_HINTS[item["port"]]
     return sorted(found.values(), key=lambda item: (item["source"] != "Docker", item["port"]))

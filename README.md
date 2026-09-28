@@ -27,6 +27,20 @@ volumes:
 
 默认管理页面监听 NAS 的 `0.0.0.0:18770`，在局域网电脑上打开 **http://NAS地址:18770**。请勿将管理端口直接暴露到公网。域名需要已接入 Cloudflare；首次登录时会自动准备 `cloudflared`。
 
+### 显示 Docker 容器名称
+
+基础部署只能发现监听端口，通常无法看到 NAS 上其他进程的名称。若要显示真实 Docker 容器名，在可信的 NAS 上先运行 `stat -c '%g' /var/run/docker.sock`，再给上面的 `autotunnel` 服务添加以下配置，把 `994` 换成输出的数字：
+
+```yaml
+    group_add:
+      - "994"
+    volumes:
+      - autotunnel-data:/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+```
+
+这里的 `volumes` 替换原有的 `volumes`，然后运行 `docker compose up -d`。也可以使用仓库里的 [可选 Compose 配置](compose.docker-discovery.yaml)。Docker socket 权限本身可控制 Docker，即使以只读方式挂载也一样；只在可信的 NAS 上启用。未启用时，少数常见端口会显示“常见用途”提示，它不是对当前应用的验证。
+
 每次向 `main` 提交代码，GitHub Actions 都会测试并发布 `linux/amd64`、`linux/arm64` 镜像到 GHCR。更新时执行 `docker compose pull && docker compose up -d`。
 
 ## 看看用起来是什么样
@@ -54,7 +68,6 @@ volumes:
 
 - Compose 使用 Linux host 网络，因此可连接 NAS 本机的 `127.0.0.1:<端口>`。Docker 应用需将 TCP 端口映射到 NAS 宿主机。管理端口默认可从局域网访问；若经 NAS 反向代理访问，请给代理设置身份验证。
 - 登录和 Tunnel 凭据保存在 `autotunnel-data` 卷内的 SQLite 数据库。重建容器不会清除它；请保护卷及其备份。已启用的穿透会在重启后恢复。
-- 若需要显示 Docker 容器名称，可使用仓库里的 [可选 Compose 配置](compose.docker-discovery.yaml)。挂载 Docker socket 即使是只读卷也具有控制 Docker 的能力，仅在可信环境启用。
 - 从 Mac 迁移时，先停止 Mac 端，再将 `~/.autotunnel/autotunnel.sqlite3` 复制到 NAS 的数据卷。不要让同一个 Tunnel 的两个实例长期同时运行。
 - Vite 等应用可能拒绝公开域名的 Host。AutoTunnel 会自动检测并调整；也可以在新建或编辑服务时手动选择 Host 处理方式。
 - 要在 Mac 上从源码运行：安装 Python 3.10+ 和 Node.js 20+，执行 `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`，再在 `frontend` 目录执行 `npm ci && npm run build`，最后从项目根目录运行 `.venv/bin/uvicorn backend.app:app --host 127.0.0.1 --port 18770`。
