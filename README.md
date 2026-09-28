@@ -23,6 +23,8 @@ services:
       - apparmor:unconfined
     environment:
       AUTOTUNNEL_DATA_DIR: /data
+      # Cloudflare 直连失败时，取消下一行注释并改为 NAS 可访问的 HTTP 代理地址。
+      # HTTPS_PROXY: http://127.0.0.1:7890
     entrypoint: ["python", "-m", "backend.entrypoint"]
     command: ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "18770"]
     volumes:
@@ -34,6 +36,8 @@ volumes:
 ```
 
 默认管理页面监听 NAS 的 `0.0.0.0:18770`，在局域网电脑上打开 **http://NAS地址:18770**。请勿将管理端口直接暴露到公网。域名需要已接入 Cloudflare；首次登录时会自动准备 `cloudflared`。
+
+如果登录时一直等待授权，且 NAS 直连 Cloudflare 被重置，可在 `environment` 下取消 `HTTPS_PROXY` 的注释，并把示例地址改成 NAS 实际使用的代理地址和端口。此 Compose 使用 host 网络；若代理也运行在 NAS 上，通常可写 `http://127.0.0.1:代理端口`。修改后运行 `docker compose up -d` 使配置生效。
 
 这份 Compose 会在同一个容器中显示 Docker 容器名和 NAS 上的 Linux 进程名。读取宿主机进程需要 root、共享 PID、`SYS_PTRACE` 和放宽 AppArmor 限制；Docker socket 即使只读挂载也具有控制 Docker 的能力，因此请仅在可信的 NAS 上运行。端口的“常见用途”只作提示，不代表已验证应用类型。
 

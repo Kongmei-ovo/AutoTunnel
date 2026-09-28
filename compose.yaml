@@ -14,6 +14,8 @@ services:
       AUTOTUNNEL_DATA_DIR: /data
       AUTOTUNNEL_ORIGIN_HOST: 127.0.0.1
       AUTOTUNNEL_PORT: 18770
+      # Cloudflare 直连失败时，取消下一行注释并改为 NAS 可访问的 HTTP 代理地址。
+      # HTTPS_PROXY: http://127.0.0.1:7890
     entrypoint: ["python", "-m", "backend.entrypoint"]
     command: ["uvicorn", "backend.app:app", "--host", "${AUTOTUNNEL_BIND_HOST:-0.0.0.0}", "--port", "18770"]
     volumes:
